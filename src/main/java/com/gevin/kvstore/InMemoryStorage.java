@@ -1,5 +1,6 @@
 package com.gevin.kvstore;
 
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryStorage implements StorageEngine {
@@ -15,8 +16,8 @@ public class InMemoryStorage implements StorageEngine {
     }
 
     @Override
-    public String get(String key) {
-        return inMemoryStore.get(key);
+    public Optional<String> get(String key) {
+        return Optional.ofNullable(inMemoryStore.get(key));
     }
 
     @Override

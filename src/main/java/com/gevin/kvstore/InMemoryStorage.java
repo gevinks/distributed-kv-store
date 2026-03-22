@@ -3,7 +3,11 @@ package com.gevin.kvstore;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryStorage implements StorageEngine {
-    ConcurrentHashMap<String, String> inMemoryStore;
+    private final ConcurrentHashMap<String, String> inMemoryStore;
+
+    InMemoryStorage() {
+        inMemoryStore = new ConcurrentHashMap<>();
+    }
 
     @Override
     public void put(String key, String value) {

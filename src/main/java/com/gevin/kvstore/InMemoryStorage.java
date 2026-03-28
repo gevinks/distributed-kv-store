@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryStorage implements StorageEngine {
     private final ConcurrentHashMap<String, String> inMemoryStore;
 
-    InMemoryStorage() {
+    public InMemoryStorage() {
         inMemoryStore = new ConcurrentHashMap<>();
     }
 

@@ -103,4 +103,16 @@ public class FileStorageDecorator implements StorageEngine{
             inMemoryStorage.delete(key);
         }
     }
+
+    public void close() {
+        try {
+            if (writeAheadLog != null) {
+                writeAheadLog.flush();
+                writeAheadLog.close();
+            }
+        }
+        catch (IOException e) {
+            System.err.println("cannot close Buffered writer : " + e.getMessage());
+        }
+    }
 }

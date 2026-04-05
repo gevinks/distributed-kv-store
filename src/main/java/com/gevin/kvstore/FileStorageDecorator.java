@@ -18,8 +18,8 @@ public class FileStorageDecorator implements StorageEngine{
         this.inMemoryStorage = inMemoryStorage; //get the memory storage type from client
         try {
 
-            Path walPath = Paths.get("storage", "wal.log");
-            Path storageDirectory = Paths.get("storage");
+            Path walPath = Paths.get("distributed-kv-store/storage", "wal.log");
+            Path storageDirectory = Paths.get("distributed-kv-store/storage");
             if (!Files.exists(storageDirectory)) {
                 try {
                     Files.createDirectories(storageDirectory);
@@ -29,7 +29,7 @@ public class FileStorageDecorator implements StorageEngine{
                 }
             }
             try {
-                this.writeAheadLog = new BufferedWriter(new FileWriter("storage/wal.log", true));
+                this.writeAheadLog = new BufferedWriter(new FileWriter("distributed-kv-store/storage/wal.log", true));
             }
             catch (IOException e) {
                 System.err.println("Cannot initialize file writer : " + e.getMessage());
@@ -37,7 +37,7 @@ public class FileStorageDecorator implements StorageEngine{
             if (Files.exists(walPath) && !Files.isDirectory(walPath)) {
                 //read from disk and write to RAM
                 try {
-                    BufferedReader reader = new BufferedReader(new FileReader("storage/wal.log"));
+                    BufferedReader reader = new BufferedReader(new FileReader("distributed-kv-store/storage/wal.log"));
                     String line;
                     while ((line = reader.readLine()) != null) {
                         callAssignedMethod(line);

@@ -1,9 +1,7 @@
 package com.gevin.kvstore;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.util.Objects;
 import java.util.Optional;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,13 +9,15 @@ import java.nio.file.Paths;
 
 public class FileStorageDecorator implements StorageEngine{
 
-    private StorageEngine inMemoryStorage;
+    private final StorageEngine inMemoryStorage;
 
-    private FileWriter writeAheadLog;
-    
+    private BufferedWriter writeAheadLog;
+
+    //constructor
     public FileStorageDecorator(StorageEngine inMemoryStorage) {
-        this.inMemoryStorage = inMemoryStorage;
+        this.inMemoryStorage = inMemoryStorage; //get the memory storage type from client
         try {
+
             Path walPath = Paths.get("storage", "wal.log");
             Path storageDirectory = Paths.get("storage");
             if (!Files.exists(storageDirectory)) {
@@ -27,6 +27,12 @@ public class FileStorageDecorator implements StorageEngine{
                 catch (IOException e) {
                     System.err.println("Couldn't create directory : " + e.getMessage());
                 }
+            }
+            try {
+                this.writeAheadLog = new BufferedWriter(new FileWriter("storage/wal.log", true));
+            }
+            catch (IOException e) {
+                System.err.println("Cannot initialize file writer : " + e.getMessage());
             }
             if (Files.exists(walPath) && !Files.isDirectory(walPath)) {
                 //read from disk and write to RAM
@@ -53,9 +59,11 @@ public class FileStorageDecorator implements StorageEngine{
 
 
     @Override
-    public void put(String key, String value) {
+    public synchronized void put(String key, String value) {
         try {
             writeAheadLog.write("put || " + key + " || " + value);
+            writeAheadLog.newLine();
+            writeAheadLog.flush();
             inMemoryStorage.put(key, value);
         }
         catch(IOException e) {
@@ -65,20 +73,15 @@ public class FileStorageDecorator implements StorageEngine{
 
     @Override
     public Optional<String> get(String key) {
-        try {
-            writeAheadLog.write("get || " + key);
-            return inMemoryStorage.get(key);
-        }
-        catch(IOException e) {
-            e.printStackTrace();
-        }
-        return Optional.empty();
+        return inMemoryStorage.get(key);
     }
 
     @Override
-    public void delete(String key) {
+    public synchronized void delete(String key) {
         try {
             writeAheadLog.write("delete || " + key);
+            writeAheadLog.newLine();
+            writeAheadLog.flush();
             inMemoryStorage.delete(key);
         } 
         catch (IOException e) {
@@ -89,45 +92,15 @@ public class FileStorageDecorator implements StorageEngine{
     private void callAssignedMethod(String line) {
         if (line.isEmpty())
                 return;
-        String key = "", value = "";
-        if (line.charAt(0) == 'p') {
-            int ind = 7;
-            while ((ind < line.length()) && !((ind < (line.length() - 1)) && (line.charAt(ind) != '|') && (line.charAt(ind + 1) != '|'))){
-                key = key + line.charAt(ind);
-                ind++;
-            }
-            ind++;
-            while ((ind < line.length())){
-                value = value + line.charAt(ind);
-                ind++;
-            }
-            put(key, value);
+        String[] parts = line.split(" \\|\\| ");
+        String command = parts[0];
+        String key = parts[1];
+        if (command.equals("put")) {
+            String value = parts[2];
+            inMemoryStorage.put(key, value);
         }
-        else if (line.charAt(0) == 'g') {
-            int ind = 7;
-            while ((ind < line.length()) && !((ind < (line.length() - 1)) && (line.charAt(ind) != '|') && (line.charAt(ind + 1) != '|'))){
-                key = key + line.charAt(ind);
-                ind++;
-            }
-            ind++;
-            while ((ind < line.length())){
-                value = value + line.charAt(ind);
-                ind++;
-            }
-            get(key);
-        }
-        else if (line.charAt(0) == 'd') {
-            int ind = 10;
-            while ((ind < line.length()) && !((ind < (line.length() - 1)) && (line.charAt(ind) != '|') && (line.charAt(ind + 1) != '|'))){
-                key = key + line.charAt(ind);
-                ind++;
-            }
-            ind++;
-            while ((ind < line.length())){
-                value = value + line.charAt(ind);
-                ind++;
-            }
-            delete(key);
+        else if (command.equals("delete")) {
+            inMemoryStorage.delete(key);
         }
     }
 }

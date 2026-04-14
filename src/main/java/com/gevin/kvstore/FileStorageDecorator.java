@@ -35,17 +35,21 @@ public class FileStorageDecorator implements StorageEngine{
             return;
 
         try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)))) {
-            while (dis.available() > 0) {
-                byte type = dis.readByte(); // 0 for PUT, 1 for DELETE
-                String key = dis.readUTF();
+            while (true) {
+                try {
+                    byte type = dis.readByte(); // 0 for PUT, 1 for DELETE
+                    String key = dis.readUTF();
 
-                if (type == 0) { // PUT
-                    int valueLength = dis.readInt();
-                    byte[] value = new byte[valueLength];
-                    dis.readFully(value);
-                    inMemoryStorage.put(key, value);
-                } else if (type == 1) { // DELETE
-                    inMemoryStorage.delete(key);
+                    if (type == 0) { // PUT
+                        int valueLength = dis.readInt();
+                        byte[] value = new byte[valueLength];
+                        dis.readFully(value);
+                        inMemoryStorage.put(key, value);
+                    } else if (type == 1) { // DELETE
+                        inMemoryStorage.delete(key);
+                    }
+                } catch (EOFException e) {
+                    break;
                 }
             }
         }

@@ -1,11 +1,10 @@
-package com.gevin;
+package com.gevin.kvstore;
 
-import com.gevin.kvstore.KVStoreGrpc;
-import com.gevin.kvstore.PutRequest;
-import com.gevin.kvstore.PutResponse;
 import io.grpc.stub.StreamObserver;
 
 public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
+
+    private final StorageEngine storage = new FileStorageDecorator(new InMemoryStorage());
 
     @Override
     public void put(PutRequest request, StreamObserver<PutResponse> responseObserver) {

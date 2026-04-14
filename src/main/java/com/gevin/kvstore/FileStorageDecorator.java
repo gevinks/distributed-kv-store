@@ -53,7 +53,7 @@ public class FileStorageDecorator implements StorageEngine{
             }
         }
         catch (IOException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.err);
         }
     }
 
@@ -67,7 +67,7 @@ public class FileStorageDecorator implements StorageEngine{
             inMemoryStorage.put(key, value);
         }
         catch(IOException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.err);
         }
     }
 
@@ -85,7 +85,7 @@ public class FileStorageDecorator implements StorageEngine{
             inMemoryStorage.delete(key);
         } 
         catch (IOException e) {
-            e.printStackTrace();
+            e.printStackTrace(System.err);
         }
     }
 

@@ -20,6 +20,7 @@ public class KVStoreServer {
             System.err.println("!!! shutting down gRPC server since JVM is shutting down !!!");
             try {
                 KVStoreServer.this.stop();
+                
             }
             catch (Exception e) {
                 e.printStackTrace(System.err);

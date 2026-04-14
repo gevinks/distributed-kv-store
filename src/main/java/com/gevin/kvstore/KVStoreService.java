@@ -18,13 +18,24 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
         byte[] value = request.getValue().toByteArray();
 
         System.out.println("Received PUT for key : " + key);
+        try {
+            storage.put(key, value);
+            PutResponse response = PutResponse.newBuilder()
+                    .setSuccess(true)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
+        catch (Exception e) {
+            System.err.println("Couldn't add key, value ");
+            e.printStackTrace(System.err);
 
-        PutResponse response = PutResponse.newBuilder()
-                .setSuccess(true)
-                .build();
-        storage.put(key, value);
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to write to storage: " + e.getMessage())
+                    .asRuntimeException());
+        }
+
+
 
     }
 
@@ -43,5 +54,26 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
         responseObserver.onNext(getResponseBuilder.build());
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void delete(DeleteRequest deleteRequest, StreamObserver<DeleteResponse> responseObserver) {
+        String key = deleteRequest.getKey();
+        System.out.println("Deleting entry of key : " + key);
+        try {
+            storage.delete(key);
+            DeleteResponse response = DeleteResponse.newBuilder()
+                    .setSuccess(true)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            System.err.println("Couldn't add key, value ");
+            e.printStackTrace(System.err);
+
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to write to storage: " + e.getMessage())
+                    .asRuntimeException());
+        }
     }
 }

@@ -7,11 +7,12 @@ import java.util.concurrent.TimeUnit;
 
 public class KVStoreServer {
     private Server server;
+    private final StorageEngine storage = new FileStorageDecorator(new InMemoryStorage());
 
     public void start() throws IOException {
         int port = 9999;
         server = ServerBuilder.forPort(port)
-                .addService(new KVStoreService())
+                .addService(new KVStoreService(storage))
                 .build().start();
 
         System.out.println("Server started, running on port: " + port);
@@ -20,7 +21,8 @@ public class KVStoreServer {
             System.err.println("!!! shutting down gRPC server since JVM is shutting down !!!");
             try {
                 KVStoreServer.this.stop();
-                
+                storage.close();
+                System.err.println("!!! WAL closed and server shut down successfully !!!");
             }
             catch (Exception e) {
                 e.printStackTrace(System.err);

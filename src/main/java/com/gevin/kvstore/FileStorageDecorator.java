@@ -88,7 +88,7 @@ public class FileStorageDecorator implements StorageEngine{
         }
     }
 
-
+    @Override
     public void close() {
         try {
             if (walOutputStream != null) {

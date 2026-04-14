@@ -25,4 +25,9 @@ public class InMemoryStorage implements StorageEngine {
         inMemoryStore.remove(key);
     }
 
+    @Override
+    public void close() {
+        System.err.println("No resource to close!!");
+    }
+
 }

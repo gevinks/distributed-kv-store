@@ -3,3 +3,4 @@ target/
 .idea/
 *.iml
 .DS_Store
+src/main/java/com/gevin/kvstore/Main.java

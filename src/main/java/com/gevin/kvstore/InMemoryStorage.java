@@ -1,23 +1,33 @@
 package com.gevin.kvstore;
 
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryStorage implements StorageEngine {
-    ConcurrentHashMap<String, String> inMemoryStore;
+    private final ConcurrentHashMap<String, byte[]> inMemoryStore;
+
+    public InMemoryStorage() {
+        inMemoryStore = new ConcurrentHashMap<>();
+    }
 
     @Override
-    public void put(String key, String value) {
+    public void put(String key, byte[] value) {
         inMemoryStore.put(key, value);
     }
 
     @Override
-    public String get(String key) {
-        return inMemoryStore.get(key);
+    public Optional<byte[]> get(String key) {
+        return Optional.ofNullable(inMemoryStore.get(key));
     }
 
     @Override
     public void delete(String key) {
         inMemoryStore.remove(key);
+    }
+
+    @Override
+    public void close() {
+        System.err.println("No resource to close!!");
     }
 
 }

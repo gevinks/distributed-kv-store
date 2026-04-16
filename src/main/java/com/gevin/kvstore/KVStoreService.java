@@ -1,15 +1,24 @@
 package com.gevin.kvstore;
 
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.stub.StreamObserver;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
     private final StorageEngine storage;
+    List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs;
+    private String serverType;
 
-    public KVStoreService(StorageEngine storage) {
+    public KVStoreService(StorageEngine storage, String serverType, List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs) {
         this.storage = storage;
+        this.serverType = serverType;
+        this.stubs = stubs;
     }
 
     @Override
@@ -20,6 +29,9 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
         System.out.println("Received PUT for key : " + key);
         try {
             storage.put(key, value);
+            if (serverType.equals("PRIMARY")) {
+                replicateToBackups(request);
+            }
             PutResponse response = PutResponse.newBuilder()
                     .setSuccess(true)
                     .build();
@@ -74,6 +86,21 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
             responseObserver.onError(io.grpc.Status.INTERNAL
                     .withDescription("Failed to write to storage: " + e.getMessage())
                     .asRuntimeException());
+        }
+    }
+
+    private void replicateToBackups(PutRequest request) {
+        System.out.println("DEBUG: Primary fanning out to " + stubs.size() + " stubs");
+        for (ReplicationServiceGrpc.ReplicationServiceFutureStub stub: stubs) {
+            try {
+                // .get() forces the code to stop and wait for the Backup to respond
+                // This transforms the call from Async to Sync temporarily
+                PutResponse resp = stub.replicate(request).get(5, TimeUnit.SECONDS);
+                System.out.println("SUCCESS: Backup responded with: " + resp.getSuccess());
+            } catch (Exception e) {
+                System.err.println("FAILURE during replication call:");
+                e.printStackTrace();
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import io.grpc.stub.StreamObserver;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
@@ -28,27 +29,35 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
         byte[] value = request.getValue().toByteArray();
 
         System.out.println("Received PUT for key : " + key);
-        try {
-            storage.put(key, value);
-            if (serverType.equals("PRIMARY")) {
-                replicateToBackups(request);
-            }
+
+        java.util.concurrent.CompletableFuture<Void> localWriteTask =
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        storage.put(key, value);
+                    }
+                    catch (Exception e) {
+                        System.err.println("Local write failed: " + e);
+                        throw new RuntimeException(e);
+                    }
+                }, ioExecutor);
+
+        java.util.concurrent.CompletableFuture<Void> replicationTask =
+                replicateToBackupsAsync(request);
+
+        localWriteTask.runAfterBothAsync(replicationTask, () -> {
             PutResponse response = PutResponse.newBuilder()
                     .setSuccess(true)
                     .build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
-        }
-        catch (Exception e) {
-            System.err.println("Couldn't add key, value ");
-            e.printStackTrace(System.err);
-
+            System.out.println("Async PUT pipeline finished successfully for key: " + key);
+        }, ioExecutor).exceptionally(ex -> {
+            System.err.println("CRITICAL: Async PUT pipeline failed for key: " + key);
             responseObserver.onError(io.grpc.Status.INTERNAL
-                    .withDescription("Failed to write to storage: " + e.getMessage())
+                    .withDescription("Distributed async write failed: " + ex.getMessage())
                     .asRuntimeException());
-        }
-
-
+            return null;
+        });
 
     }
 
@@ -90,20 +99,18 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
         }
     }
 
-    private void replicateToBackups(PutRequest request) {
-        System.out.println("DEBUG: Primary fanning out to " + stubs.size() + " stubs");
-        for (ReplicationServiceGrpc.ReplicationServiceFutureStub stub: stubs) {
-            try {
-                // .get() forces the code to stop and wait for the Backup to respond
-                // This transforms the call from Async to Sync temporarily
-                PutResponse resp = stub.replicate(request).get(5, TimeUnit.SECONDS);
-                System.out.println("SUCCESS: Backup responded with: " + resp.getSuccess());
-            } catch (Exception e) {
-                System.err.println("FAILURE during replication call:");
-                e.printStackTrace();
-            }
-        }
+    private java.util.concurrent.CompletableFuture<Void> replicateToBackupsAsync(PutRequest request) {
+        if (!serverType.equals("PRIMARY") || stubs.isEmpty())
+            return java.util.concurrent.CompletableFuture.completedFuture(null);
+
+        java.util.List<java.util.concurrent.CompletableFuture<PutResponse>> futures =
+                stubs.stream().map(stub -> toCompletableFuture(stub.replicate(request))).toList();
+
+        return java.util.concurrent.CompletableFuture.allOf(
+                futures.toArray(new java.util.concurrent.CompletableFuture[0])
+        );
     }
+
 
     // Add this method at the bottom of your KVStoreService class
     private <T> java.util.concurrent.CompletableFuture<T> toCompletableFuture(

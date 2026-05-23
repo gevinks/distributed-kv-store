@@ -14,6 +14,7 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
     private final StorageEngine storage;
     List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs;
     private final String serverType;
+    private final java.util.concurrent.ExecutorService ioExecutor = java.util.concurrent.Executors.newFixedThreadPool(8);
 
     public KVStoreService(StorageEngine storage, String serverType, List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs) {
         this.storage = storage;
@@ -125,7 +126,7 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
                         completableFuture.completeExceptionally(t);
                     }
                 },
-                com.google.common.util.concurrent.MoreExecutors.directExecutor()
+                this.ioExecutor
         );
 
         return completableFuture;

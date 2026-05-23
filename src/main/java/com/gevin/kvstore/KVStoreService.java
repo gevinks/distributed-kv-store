@@ -13,7 +13,7 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
     private final StorageEngine storage;
     List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs;
-    private String serverType;
+    private final String serverType;
 
     public KVStoreService(StorageEngine storage, String serverType, List<ReplicationServiceGrpc.ReplicationServiceFutureStub> stubs) {
         this.storage = storage;
@@ -102,5 +102,32 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
                 e.printStackTrace();
             }
         }
+    }
+
+    // Add this method at the bottom of your KVStoreService class
+    private <T> java.util.concurrent.CompletableFuture<T> toCompletableFuture(
+            com.google.common.util.concurrent.ListenableFuture<T> listenableFuture
+    ) {
+        java.util.concurrent.CompletableFuture<T> completableFuture = new java.util.concurrent.CompletableFuture<>();
+
+        com.google.common.util.concurrent.Futures.addCallback(
+                listenableFuture,
+                new com.google.common.util.concurrent.FutureCallback<T>() {
+                    @Override
+                    public void onSuccess(T result) {
+                        // System network call succeeded! Complete our Java future
+                        completableFuture.complete(result);
+                    }
+
+                    @Override
+                    public void onFailure(Throwable t) {
+                        // System network call failed! Pass the exception down the pipeline
+                        completableFuture.completeExceptionally(t);
+                    }
+                },
+                com.google.common.util.concurrent.MoreExecutors.directExecutor()
+        );
+
+        return completableFuture;
     }
 }

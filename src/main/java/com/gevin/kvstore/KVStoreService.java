@@ -82,21 +82,35 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
     public void delete(DeleteRequest deleteRequest, StreamObserver<DeleteResponse> responseObserver) {
         String key = deleteRequest.getKey();
         System.out.println("Deleting entry of key : " + key);
-        try {
-            storage.delete(key);
+
+        java.util.concurrent.CompletableFuture<Void> localDeleteTask =
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        storage.delete(key);
+                    }
+                    catch (Exception e) {
+                        System.err.println("Local delete for key error: " + e);
+                        throw new RuntimeException(e);
+                    }
+                }, ioExecutor);
+
+        java.util.concurrent.CompletableFuture<Void> replicateDeleteTask =
+                replicateDeletesToBackupAsync(deleteRequest);
+
+        localDeleteTask.runAfterBothAsync(replicateDeleteTask, ()-> {
             DeleteResponse response = DeleteResponse.newBuilder()
-                    .setSuccess(true)
-                    .build();
+                    .setSuccess(true).build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
-        } catch (Exception e) {
-            System.err.println("Couldn't add key, value ");
-            e.printStackTrace(System.err);
-
+            System.out.println("Async DELETE pipeline successfully completed for key: " + key);
+        }, ioExecutor).exceptionally(ex -> {
+            System.err.println("CRITICAL: Async DELETE pipeline failed for key: " + key);
             responseObserver.onError(io.grpc.Status.INTERNAL
-                    .withDescription("Failed to write to storage: " + e.getMessage())
+                    .withDescription("Distributed async delete failed: " + ex.getMessage())
                     .asRuntimeException());
-        }
+            return null;
+        });
+
     }
 
     private java.util.concurrent.CompletableFuture<Void> replicateToBackupsAsync(PutRequest request) {
@@ -105,6 +119,18 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
         java.util.List<java.util.concurrent.CompletableFuture<PutResponse>> futures =
                 stubs.stream().map(stub -> toCompletableFuture(stub.replicate(request))).toList();
+
+        return java.util.concurrent.CompletableFuture.allOf(
+                futures.toArray(new java.util.concurrent.CompletableFuture[0])
+        );
+    }
+
+    private java.util.concurrent.CompletableFuture<Void> replicateDeletesToBackupAsync(DeleteRequest deleteRequest) {
+        if (!serverType.equals("PRIMARY") || stubs.isEmpty())
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+
+        java.util.List<java.util.concurrent.CompletableFuture<DeleteResponse>> futures =
+                stubs.stream().map(stub -> toCompletableFuture(stub.replicateDelete(deleteRequest))).toList();
 
         return java.util.concurrent.CompletableFuture.allOf(
                 futures.toArray(new java.util.concurrent.CompletableFuture[0])

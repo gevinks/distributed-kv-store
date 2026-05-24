@@ -39,6 +39,7 @@ service KVStore {
 
 service ReplicationService {
   rpc Replicate(PutRequest) returns (PutResponse);
+  rpc ReplicateDelete(DeleteRequest) returns (DeleteResponse);
 }
 
 

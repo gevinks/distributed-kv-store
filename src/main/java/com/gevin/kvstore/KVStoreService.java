@@ -3,12 +3,15 @@ package com.gevin.kvstore;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
@@ -30,33 +33,58 @@ public class KVStoreService extends KVStoreGrpc.KVStoreImplBase {
 
         System.out.println("Received PUT for key : " + key);
 
-        java.util.concurrent.CompletableFuture<Void> localWriteTask =
-                java.util.concurrent.CompletableFuture.runAsync(() -> {
+        int totalNodes = stubs.size() + 1;
+        int writeQuorum = (totalNodes/2) + 1;
+
+        AtomicInteger successCount = new AtomicInteger(1);
+        AtomicInteger failureCount = new AtomicInteger(0);
+        AtomicBoolean clientSignalled = new AtomicBoolean(false);
+        CompletableFuture<Void> quorumFuture = new CompletableFuture<>();
+
+        CompletableFuture<Void> localFutureWrite = CompletableFuture.runAsync(() -> {
+            storage.put(key, value);
+        }, ioExecutor);
+
+        localFutureWrite.thenRunAsync(() -> {
+            if (successCount.get() >= writeQuorum) {
+                quorumFuture.complete(null);
+                return;
+            }
+            for (var stub: stubs) {
+                var grpcFuture = stub.replicate(request);
+
+                grpcFuture.addListener(() -> {
                     try {
-                        storage.put(key, value);
+                        grpcFuture.get();
+                        int currentSuccesses = successCount.incrementAndGet();
+                        if (currentSuccesses >= writeQuorum && clientSignalled.compareAndSet(false, true)) {
+                            quorumFuture.complete(null);
+                        }
                     }
                     catch (Exception e) {
-                        System.err.println("Local write failed: " + e);
-                        throw new RuntimeException(e);
+                        int currentFailures = failureCount.incrementAndGet();
+                        int maxAllowableFailures = totalNodes - writeQuorum;
+
+                        // Fast-fail: If too many nodes crash to ever achieve quorum, fail early
+                        if (currentFailures > maxAllowableFailures && clientSignalled.compareAndSet(false, true)) {
+                            quorumFuture.completeExceptionally(new RuntimeException("Quorum write failed due to node dropouts."));
+                        }
                     }
                 }, ioExecutor);
+            }
+        }, ioExecutor);
 
-        java.util.concurrent.CompletableFuture<Void> replicationTask =
-                replicateToBackupsAsync(request);
-
-        localWriteTask.runAfterBothAsync(replicationTask, () -> {
-            PutResponse response = PutResponse.newBuilder()
-                    .setSuccess(true)
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-            System.out.println("Async PUT pipeline finished successfully for key: " + key);
-        }, ioExecutor).exceptionally(ex -> {
-            System.err.println("CRITICAL: Async PUT pipeline failed for key: " + key);
-            responseObserver.onError(io.grpc.Status.INTERNAL
-                    .withDescription("Distributed async write failed: " + ex.getMessage())
-                    .asRuntimeException());
-            return null;
+        quorumFuture.whenComplete((result, throwable) -> {
+            if (throwable != null) {
+                responseObserver.onError(Status.INTERNAL
+                        .withDescription(throwable.getMessage())
+                        .asRuntimeException());
+            }
+            else {
+                responseObserver.onNext(PutResponse.newBuilder().setSuccess(true).build());
+                responseObserver.onCompleted();
+                System.out.println("Async PUT pipeline finished successfully for key: " + request.getKey());
+            }
         });
 
     }
